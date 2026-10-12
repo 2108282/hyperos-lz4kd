@@ -61,10 +61,8 @@ jobs:
           cp -rf lz4k_src/lib/* common/lib/
           cp -rf lz4k_src/crypto/* common/crypto/
 
-          echo "Applying lz4kd.patch..."
-          cd common
-          patch -p1 -F 3 < ../lz4kd.patch
-          cd ..
+          echo "Applying LZ4KD patches via python injector..."
+          python3 apply_lz4kd.py
 
       - name: 配置 GKI 内核开关并启用 LZ4KD
         run: |
