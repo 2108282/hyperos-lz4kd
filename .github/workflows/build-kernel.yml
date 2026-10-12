@@ -28,7 +28,7 @@ jobs:
         uses: easimon/maximize-build-space@master
         with:
           swap-size-mb: 8192
-          root-reserve-mb: 8192
+          root-reserve-mb: 16384
           temp-reserve-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
@@ -37,6 +37,14 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Redirect Cache to High Capacity Partition
+        run: |
+          echo "[+] Redirecting caches to 90GB+ workspace partition..."
+          mkdir -p $GITHUB_WORKSPACE/.cache/bazel
+          rm -rf /home/runner/.cache 2>/dev/null || true
+          ln -sf $GITHUB_WORKSPACE/.cache /home/runner/.cache
+          df -h
 
       - name: Download Kernel Source via Repo
         run: |
@@ -108,7 +116,7 @@ jobs:
             BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
           else
             echo "[+] Building with Kleaf / Bazel"
-            tools/bazel run --cache_dir=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
+            tools/bazel run --cache_dir=$GITHUB_WORKSPACE/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
           fi
 
       - name: Package AnyKernel3 Flashable Zip
