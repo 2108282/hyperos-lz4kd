@@ -24,9 +24,6 @@ jobs:
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -37,6 +34,9 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Download Kernel Source via Repo
         run: |
@@ -57,8 +57,8 @@ jobs:
           if [ -n "$TARGET_COMMIT" ]; then
             echo "[+] Pinning common repo to exact commit: $TARGET_COMMIT"
             cd common
-            git fetch --depth=1 origin "$TARGET_COMMIT" || true
-            git checkout "$TARGET_COMMIT" || true
+            git fetch --depth=1 https://android.googlesource.com/kernel/common "$TARGET_COMMIT"
+            git checkout FETCH_HEAD
             cd ..
           fi
 
@@ -68,6 +68,7 @@ jobs:
           GKI_ROOT=$GITHUB_WORKSPACE/android-kernel
           LZ4KD_SRC=$GITHUB_WORKSPACE/lz4kd_module
 
+          ls -la $LZ4KD_SRC/
           mkdir -p $GKI_ROOT/common/crypto/lz4kd
           cp -rf $LZ4KD_SRC/* $GKI_ROOT/common/crypto/lz4kd/
           cp -rf $LZ4KD_SRC/include/linux/* $GKI_ROOT/common/include/linux/
@@ -131,7 +132,6 @@ jobs:
           git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3
           rm -rf AnyKernel3/.git AnyKernel3/README.md
 
-          # 针对小米 14 (houji) 和通用 GKI 设备进行配置
           sed -i 's/device.name1=.*/device.name1=houji/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=shennong/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name3=.*/device.name3=gki_aarch64/g' AnyKernel3/anykernel.sh
