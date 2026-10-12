@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: 检出仓库代码
@@ -29,15 +29,23 @@ jobs:
       - name: 安装基础编译依赖与 Clang 17 工具链
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends             build-essential             bc             bison             flex             libssl-dev             libelf-dev             git             curl             zip             unzip             python3             clang-17             lld-17             llvm-17             gcc-aarch64-linux-gnu
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex libssl-dev libelf-dev git curl zip unzip python3 gcc-aarch64-linux-gnu
 
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100
-          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-17 100
-          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-17 100
-          sudo update-alternatives --install /usr/bin/llvm-objcopy llvm-objcopy /usr/bin/llvm-objcopy-17 100
-          sudo update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-17 100
-          sudo update-alternatives --install /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-17 100
-          sudo update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-17 100
+          # 安装并链接 Clang 17
+          if ! sudo apt-get install -y clang-17 lld-17 llvm-17; then
+            wget https://apt.llvm.org/llvm.sh
+            chmod +x llvm.sh
+            sudo ./llvm.sh 17
+            sudo apt-get install -y lld-17 llvm-17
+          fi
+
+          sudo ln -sf $(which clang-17) /usr/bin/clang
+          sudo ln -sf $(which ld.lld-17) /usr/bin/ld.lld
+          sudo ln -sf $(which llvm-ar-17) /usr/bin/llvm-ar
+          sudo ln -sf $(which llvm-nm-17) /usr/bin/llvm-nm
+          sudo ln -sf $(which llvm-objcopy-17) /usr/bin/llvm-objcopy
+          sudo ln -sf $(which llvm-strip-17) /usr/bin/llvm-strip
 
           clang --version
 
@@ -73,7 +81,7 @@ jobs:
           echo "CONFIG_LZ4KD_DECOMPRESS=y" >> "$CONFIG_FILE"
           echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
           echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
-          echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE" 
+          echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
 
           echo "Kernel defconfig updated successfully."
           cd ..
@@ -135,10 +143,10 @@ jobs:
             - **目标机型**：仅限小米 14 (houji)
             - **系统版本**：澎湃 OS (HyperOS) 1 / 2 / 3
             - **产物文件**：
-              - `AnyKernel3-Xiaomi14-houji-LZ4KD.zip` (手机端卡刷包)
-              - `Image` (内核二进制，支持快速热测试打包)
+              - AnyKernel3-Xiaomi14-houji-LZ4KD.zip (手机端卡刷包)
+              - Image (内核二进制，支持快速热测试打包)
             - **热测试防翻车说明**：
-              首次测试强烈建议使用 `fastboot boot` 命令在 RAM 中临时热启动验证，确认无误再持久刷入！
+              首次测试强烈建议使用 fastboot boot 命令在 RAM 中临时热启动验证，确认无误再持久刷入！
           files: |
             AnyKernel3-Xiaomi14-houji-LZ4KD.zip
             common/arch/arm64/boot/Image
