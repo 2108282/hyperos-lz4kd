@@ -131,6 +131,12 @@ jobs:
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           rm -rf AnyKernel3/.git AnyKernel3/README.md
 
+          # 针对高通骁龙 8 Gen 3 纯 64 位平台替换 AArch64 工具链 (彻底消除 Busybox setup failed)
+          cp -f tools_arm64/busybox AnyKernel3/tools/busybox
+          cp -f tools_arm64/magiskboot AnyKernel3/tools/magiskboot
+          cp -f tools_arm64/magiskpolicy AnyKernel3/tools/magiskpolicy
+          chmod 755 AnyKernel3/tools/*
+
           # 写入适配小米 14 (houji) 的 GKI AnyKernel3 引导配置
           sed -i 's/kernel.string=.*/kernel.string=Xiaomi 14 LZ4KD Kernel (GKI 6.1)/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name1=.*/device.name1=houji/g' AnyKernel3/anykernel.sh
