@@ -119,38 +119,7 @@ jobs:
           echo "Cloning AnyKernel3..."
           git clone https://github.com/osm0sis/AnyKernel3.git -b master anykernel
           cd anykernel
-
-          cat << 'AKEOF' > anykernel.sh
-### AnyKernel3 Ramdisk Mod Script
-## osm0sis @ xda-developers & GKI 2.0
-properties() { '
-kernel.string=Xiaomi 14 (houji) GKI 6.1 with LZ4KD
-do.devicecheck=1
-do.modules=0
-do.systemless=0
-do.cleanup=1
-do.cleanuponabort=0
-device.name1=houji
-'; }
-
-block=boot;
-is_slot_device=auto;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
-no_magisk_check=1;
-
-. tools/ak3-core.sh;
-
-split_boot;
-
-if [ -f "$SPLITIMG/ramdisk.cpio" ]; then
-    unpack_ramdisk;
-    write_boot;
-else
-    flash_boot;
-fi;
-AKEOF
-
+          cp ../anykernel_template.sh ./anykernel.sh
           cp ../common/arch/arm64/boot/Image ./Image
           zip -r9 ../AnyKernel3-Xiaomi14-houji-LZ4KD.zip * -x .git* -x README.md
           cd ..

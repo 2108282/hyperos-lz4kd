@@ -9,3 +9,4 @@ fix_checkout.py
 fix_vermagic.py
 fix_step.py
 fix_ak3_step.py
+fix_clean_yaml.py
