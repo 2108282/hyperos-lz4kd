@@ -1,48 +1,69 @@
-# Xiaomi 14 (houji) GKI 6.1 with LZ4KD Compression
+# 小米 14 (houji 专机专用) GKI 6.1 + LZ4KD 内存压缩内核
 
-本项目为 **小米 14 (houji)** 及 **小米 14 Pro (shennong)**（高通骁龙 8 Gen 3 平台）定制的 Android 14 GKI 6.1 通用内核自动化云编译项目。
+本项目为 **小米 14（代号 houji）** 量身定制的 Android 14 GKI 6.1 内核自动化构建流水线。
 
-在标准 Google AOSP GKI 通用内核基础上，集成了华为专有、针对 4KB 内存页特化优化的 **LZ4KD（LZ4K + Delta 跨页差分压缩）** 内存压缩算法，专为移动端 ZRAM 打造。
-
----
-
-## 核心特性
-
-- **基于 AOSP 官方 GKI 6.1**：保持 KMI-11 接口一致，完全兼容澎湃 OS (HyperOS) 1 / 2 / 3 官方出厂系统的所有闭源驱动（相机、触控、快充、高刷无任何异常）。
-- **LZ4KD 专有压缩算法**：
-  - 针对移动设备 4KB 单物理内存页剪裁，紧凑 24-bit Tag 结构消除冗余通用头开销；
-  - 引入 Delta（差分增量）压缩，大幅提高内存回收保活率，兼顾超高解压速度与低功耗。
-- **全自动化 GitHub Actions 云编译**：无需本地庞大编译链，云端全自动出包，每次更新一键重新构建。
+集成华为针对 4KB 物理内存页特化剪裁的 **LZ4KD（LZ4K + Delta 跨页差分压缩）** 专有内存压缩算法，专供移动端 ZRAM 扩容与性能优化。
 
 ---
 
-## 使用与刷入指南
+## 严格机型限定
 
-### 1. 编译
-点击仓库顶部的 **Actions** 标签页 -> 选择 **Build Xiaomi 14 GKI 6.1 with LZ4KD** -> 点击 **Run workflow** 即可在云端开始编译（约 15 分钟）。
+- **支持设备**：**小米 14（代号 houji，设备代号 23127PN0CC）**
+- **严正声明**：本项目**未适配且不支持小米 14 Pro (shennong)** 等其他机型，严禁在未经测试的机型上盲刷！
 
-### 2. 刷入步骤 (手机端一键直刷)
-1. 编译完成后，在 GitHub Actions 的 **Releases** 或 **Artifacts** 页面下载 `AnyKernel3-Xiaomi14-LZ4KD-GKI.zip`；
-2. 手机打开 **Kernel Flasher** App；
-3. 点击“Flash AK3 Zip” -> 选择下载好的 Zip 包直刷；
-4. 重启手机。
+---
 
-### 3. 生效验证与控制
-开机后在终端或 Termux / ADB 中执行：
+## 核心技术与特性
+
+1. **AOSP GKI 6.1 官方长期支持基底**：
+   - 保持标准的 KMI-11 接口不变，与官方出厂的 493 个外置驱动模块（屏幕触控、相机 ISP、高刷调度、快充协议等）无缝协作。
+2. **LZ4KD 专有压缩架构**：
+   - **4KB 页紧凑编码**：以 24-bit Tag 彻底砍掉通用格式在大流下的冗余包头；
+   - **Delta 跨页差分增量**：支持关联内存页差分压缩，压榨更多后台留存运存；
+   - **微秒级低延迟与低发热**：上下文完全落在 CPU L1/L2 Cache 内，杜绝内存压缩引起的发热与掉帧。
+
+---
+
+## 绝对防翻车指南：热测试与刷入流程
+
+### 方案 A：零风险“内存热测试”（强烈推荐！）
+**原理**：利用 Fastboot 将内核仅加载到手机运行内存（RAM）中一次性临时引导，**完全不写入手机任何物理分区**。
+- 如果开机成功，进入系统即可验证功能；
+- 如果出现任何卡米或异常，**长按电源键强制重启**，手机立刻回到原厂系统，物理存储毫无变动，绝对零风险。
+
+**实操步骤**：
+1. 在 GitHub Actions 页面下载产物中的 `Image`；
+2. 将手机连接电脑进入 Fastboot 模式；
+3. 将 `Image` 打包为临时 boot 或使用工具热加载：
+   ```bash
+   fastboot boot test_boot.img
+   ```
+4. 开机验证一切正常后，再执行持久刷入。
+
+---
+
+### 方案 B：正式持久刷入（通过 AnyKernel3）
+1. 打开手机端 **Kernel Flasher** 应用；
+2. 点击“Flash AK3 Zip” -> 选择下载好的 `AnyKernel3-Xiaomi14-houji-LZ4KD.zip`；
+3. 刷入完成重启。
+
+---
+
+## 验证生效
+
+开机后在终端执行：
 ```bash
 cat /sys/block/zram0/comp_algorithm
 ```
-若回显中包含 `[lz4kd]`，说明 LZ4KD 算法已正式在 ZRAM 中生效并被作为默认压缩算法！
-
-手动切换命令（如需测试对比）：
-```bash
-su
-swapoff /dev/block/zram0
-echo lz4kd > /sys/block/zram0/comp_algorithm
-swapon /dev/block/zram0
-```
+回显列表中出现 `[lz4kd]` 即代表算法成功接管 ZRAM。
 
 ---
 
-## 安全与还原说明
-本项目在刷入前请务必保留官方原厂 `boot.img` 镜像。若需还原，直接在 Kernel Flasher 或电脑 fastboot 刷回原厂 boot 即可秒级还原。
+## 紧急还原
+
+本地已在工作区生成当前原厂的官方备份镜像：`stock_boot_backup.img`。  
+随时可通过 Fastboot 一键秒级还原：
+```bash
+fastboot flash boot stock_boot_backup.img
+fastboot reboot
+```

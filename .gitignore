@@ -1,3 +1,4 @@
 write_config.py
 *.tmp
 *.pyc
+update_project.py

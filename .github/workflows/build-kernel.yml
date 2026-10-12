@@ -1,33 +1,20 @@
-name: Build Xiaomi 14 GKI 6.1 with LZ4KD
+name: Build Xiaomi 14 (houji) GKI 6.1 with LZ4KD
 
 permissions:
   contents: write
 
 on:
   workflow_dispatch:
-    inputs:
-      android_version:
-        description: 'Android 版本'
-        required: true
-        default: 'android14'
-      kernel_version:
-        description: '内核主版本'
-        required: true
-        default: '6.1'
   push:
     branches:
       - main
-    paths:
-      - 'lz4kd.patch'
-      - 'lz4k_src/**'
-      - '.github/workflows/build-kernel.yml'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
-      - name: 检出当前仓库代码
+      - name: 检出仓库代码
         uses: actions/checkout@v4
 
       - name: 清理磁盘空间
@@ -42,24 +29,8 @@ jobs:
       - name: 安装基础编译依赖与 Clang 17 工具链
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            bc \
-            bison \
-            flex \
-            libssl-dev \
-            libelf-dev \
-            git \
-            curl \
-            zip \
-            unzip \
-            python3 \
-            clang-17 \
-            lld-17 \
-            llvm-17 \
-            gcc-aarch64-linux-gnu
+          sudo apt-get install -y --no-install-recommends             build-essential             bc             bison             flex             libssl-dev             libelf-dev             git             curl             zip             unzip             python3             clang-17             lld-17             llvm-17             gcc-aarch64-linux-gnu
 
-          # 设置 LLVM 17 默认替代软链接，确保内核 LLVM=1 正确识别
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100
           sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-17 100
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-17 100
@@ -70,7 +41,7 @@ jobs:
 
           clang --version
 
-      - name: 拉取 AOSP GKI 6.1 内核通用源码
+      - name: 拉取 AOSP GKI 6.1 内核源码
         run: |
           echo "Cloning AOSP android14-6.1 common kernel source..."
           git clone --depth=1 https://android.googlesource.com/kernel/common.git -b android14-6.1 common
@@ -92,11 +63,10 @@ jobs:
           cd common
           CONFIG_FILE="arch/arm64/configs/gki_defconfig"
           
-          # 确保 ZRAM 编入内核而不是作为模块
+          # 确保 ZRAM 编入核心内核 Image
           sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
           sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
 
-          # 写入 LZ4K 与 LZ4KD 专有配置开关
           cat << 'CONF' >> "$CONFIG_FILE"
 CONFIG_LZ4K_COMPRESS=y
 CONFIG_LZ4K_DECOMPRESS=y
@@ -128,29 +98,31 @@ CONF
           ls -lh arch/arm64/boot/Image
           cd ..
 
-      - name: 打包 AnyKernel3 刷机包
+      - name: 打包 AnyKernel3 刷机包 (仅限小米14 houji)
         run: |
           echo "Cloning AnyKernel3..."
           git clone https://github.com/osm0sis/AnyKernel3.git -b master anykernel
           cd anykernel
           
-          # 配置 AnyKernel3 适配 Xiaomi 14 (houji)
+          # 仅适配小米 14 (houji)，杜绝跨机型混用
           sed -i 's/device.name1=.*/device.name1=houji/g' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=shennong/g' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=Xiaomi 14/g' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=/g' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=/g' anykernel.sh
+          sed -i 's/device.name4=.*/device.name4=/g' anykernel.sh
+          sed -i 's/device.name5=.*/device.name5=/g' anykernel.sh
           sed -i 's/is_slot_device=0/is_slot_device=1/g' anykernel.sh
 
           cp ../common/arch/arm64/boot/Image ./Image
-          zip -r9 ../AnyKernel3-Xiaomi14-LZ4KD-GKI.zip * -x .git* -x README.md
+          zip -r9 ../AnyKernel3-Xiaomi14-houji-LZ4KD.zip * -x .git* -x README.md
           cd ..
-          ls -lh AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+          ls -lh AnyKernel3-Xiaomi14-houji-LZ4KD.zip
 
       - name: 上传构建产物 (Artifacts)
         uses: actions/upload-artifact@v4
         with:
-          name: Xiaomi14-LZ4KD-GKI-Kernel
+          name: Xiaomi14-houji-LZ4KD-Kernel
           path: |
-            AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+            AnyKernel3-Xiaomi14-houji-LZ4KD.zip
             common/arch/arm64/boot/Image
 
       - name: 发布 GitHub Release
@@ -158,20 +130,19 @@ CONF
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: GKI-6.1-LZ4KD-${{ github.run_number }}
-          name: Xiaomi 14 GKI 6.1 with LZ4KD Build #${{ github.run_number }}
+          name: Xiaomi 14 (houji) GKI 6.1 LZ4KD Build #${{ github.run_number }}
           body: |
-            ## 小米 14 (houji) GKI 6.1 + LZ4KD 内核刷机包
-            
-            - **适用机型**：小米 14 (houji) / 小米 14 Pro (shennong)
-            - **系统版本**：澎湃 OS (HyperOS) 1 / 2 / 3 (Android 14 GKI 6.1 架构)
-            - **特性**：
-              - 集成华为专有 ZRAM 内存压缩算法 **LZ4KD**（支持 4KB 页剪裁与 Delta 差分压缩）
-              - 默认启用 LZ4KD 算法
-            - **刷入说明**：
-              1. 推荐在已 Root 状态下使用 **Kernel Flasher** 挑选 AnyKernel3-Xiaomi14-LZ4KD-GKI.zip 一键直刷；
-              2. 刷入前请确保已备份原厂 boot.img。
+            ## 小米 14 (houji 专用) GKI 6.1 + LZ4KD 内核
+
+            - **目标机型**：仅限小米 14 (houji)
+            - **系统版本**：澎湃 OS (HyperOS) 1 / 2 / 3
+            - **产物文件**：
+              - `AnyKernel3-Xiaomi14-houji-LZ4KD.zip` (手机端卡刷包)
+              - `Image` (内核二进制，支持快速热测试打包)
+            - **热测试防翻车说明**：
+              首次测试强烈建议使用 `fastboot boot` 命令在 RAM 中临时热启动验证，确认无误再持久刷入！
           files: |
-            AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+            AnyKernel3-Xiaomi14-houji-LZ4KD.zip
             common/arch/arm64/boot/Image
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
