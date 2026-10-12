@@ -1,0 +1,177 @@
+name: Build Xiaomi 14 GKI 6.1 with LZ4KD
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      android_version:
+        description: 'Android 版本'
+        required: true
+        default: 'android14'
+      kernel_version:
+        description: '内核主版本'
+        required: true
+        default: '6.1'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lz4kd.patch'
+      - 'lz4k_src/**'
+      - '.github/workflows/build-kernel.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: 检出当前仓库代码
+        uses: actions/checkout@v4
+
+      - name: 清理磁盘空间
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h
+
+      - name: 安装基础编译依赖与 Clang 17 工具链
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            git \
+            curl \
+            zip \
+            unzip \
+            python3 \
+            clang-17 \
+            lld-17 \
+            llvm-17 \
+            gcc-aarch64-linux-gnu
+
+          # 设置 LLVM 17 默认替代软链接，确保内核 LLVM=1 正确识别
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100
+          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-17 100
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-17 100
+          sudo update-alternatives --install /usr/bin/llvm-objcopy llvm-objcopy /usr/bin/llvm-objcopy-17 100
+          sudo update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-17 100
+          sudo update-alternatives --install /usr/bin/llvm-nm llvm-nm /usr/bin/llvm-nm-17 100
+          sudo update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-17 100
+
+          clang --version
+
+      - name: 拉取 AOSP GKI 6.1 内核通用源码
+        run: |
+          echo "Cloning AOSP android14-6.1 common kernel source..."
+          git clone --depth=1 https://android.googlesource.com/kernel/common.git -b android14-6.1 common
+
+      - name: 注入 LZ4KD 源码与驱动补丁
+        run: |
+          echo "Injecting LZ4K and LZ4KD source files..."
+          cp -rf lz4k_src/include/linux/* common/include/linux/
+          cp -rf lz4k_src/lib/* common/lib/
+          cp -rf lz4k_src/crypto/* common/crypto/
+
+          echo "Applying lz4kd.patch..."
+          cd common
+          patch -p1 -F 3 < ../lz4kd.patch
+          cd ..
+
+      - name: 配置 GKI 内核开关并启用 LZ4KD
+        run: |
+          cd common
+          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          
+          # 确保 ZRAM 编入内核而不是作为模块
+          sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+          sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
+
+          # 写入 LZ4K 与 LZ4KD 专有配置开关
+          cat << 'CONF' >> "$CONFIG_FILE"
+CONFIG_LZ4K_COMPRESS=y
+CONFIG_LZ4K_DECOMPRESS=y
+CONFIG_LZ4KD_COMPRESS=y
+CONFIG_LZ4KD_DECOMPRESS=y
+CONFIG_CRYPTO_LZ4KD=y
+CONFIG_ZRAM=y
+CONFIG_ZRAM_DEF_COMP_LZ4KD=y
+CONF
+
+          echo "Kernel defconfig updated successfully."
+          cd ..
+
+      - name: 编译 GKI 内核 (Image)
+        run: |
+          cd common
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export LLVM=1
+          export LLVM_IAS=1
+
+          echo "Generating defconfig..."
+          make -j$(nproc) gki_defconfig
+
+          echo "Starting kernel compilation..."
+          make -j$(nproc) Image
+
+          ls -lh arch/arm64/boot/Image
+          cd ..
+
+      - name: 打包 AnyKernel3 刷机包
+        run: |
+          echo "Cloning AnyKernel3..."
+          git clone https://github.com/osm0sis/AnyKernel3.git -b master anykernel
+          cd anykernel
+          
+          # 配置 AnyKernel3 适配 Xiaomi 14 (houji)
+          sed -i 's/device.name1=.*/device.name1=houji/g' anykernel.sh
+          sed -i 's/device.name2=.*/device.name2=shennong/g' anykernel.sh
+          sed -i 's/device.name3=.*/device.name3=Xiaomi 14/g' anykernel.sh
+          sed -i 's/is_slot_device=0/is_slot_device=1/g' anykernel.sh
+
+          cp ../common/arch/arm64/boot/Image ./Image
+          zip -r9 ../AnyKernel3-Xiaomi14-LZ4KD-GKI.zip * -x .git* -x README.md
+          cd ..
+          ls -lh AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+
+      - name: 上传构建产物 (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiaomi14-LZ4KD-GKI-Kernel
+          path: |
+            AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+            common/arch/arm64/boot/Image
+
+      - name: 发布 GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: GKI-6.1-LZ4KD-${{ github.run_number }}
+          name: Xiaomi 14 GKI 6.1 with LZ4KD Build #${{ github.run_number }}
+          body: |
+            ## 小米 14 (houji) GKI 6.1 + LZ4KD 内核刷机包
+            
+            - **适用机型**：小米 14 (houji) / 小米 14 Pro (shennong)
+            - **系统版本**：澎湃 OS (HyperOS) 1 / 2 / 3 (Android 14 GKI 6.1 架构)
+            - **特性**：
+              - 集成华为专有 ZRAM 内存压缩算法 **LZ4KD**（支持 4KB 页剪裁与 Delta 差分压缩）
+              - 默认启用 LZ4KD 算法
+            - **刷入说明**：
+              1. 推荐在已 Root 状态下使用 **Kernel Flasher** 挑选 AnyKernel3-Xiaomi14-LZ4KD-GKI.zip 一键直刷；
+              2. 刷入前请确保已备份原厂 boot.img。
+          files: |
+            AnyKernel3-Xiaomi14-LZ4KD-GKI.zip
+            common/arch/arm64/boot/Image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
