@@ -67,15 +67,13 @@ jobs:
           sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
           sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
 
-          cat << 'CONF' >> "$CONFIG_FILE"
-CONFIG_LZ4K_COMPRESS=y
-CONFIG_LZ4K_DECOMPRESS=y
-CONFIG_LZ4KD_COMPRESS=y
-CONFIG_LZ4KD_DECOMPRESS=y
-CONFIG_CRYPTO_LZ4KD=y
-CONFIG_ZRAM=y
-CONFIG_ZRAM_DEF_COMP_LZ4KD=y
-CONF
+          echo "CONFIG_LZ4K_COMPRESS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_LZ4K_DECOMPRESS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_LZ4KD_COMPRESS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_LZ4KD_DECOMPRESS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
+          echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
+          echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE" 
 
           echo "Kernel defconfig updated successfully."
           cd ..
