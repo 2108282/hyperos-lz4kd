@@ -1,29 +1,44 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Cryptographic API.
  *
- * Copyright (c) Huawei Technologies Co., Ltd. 2022. All rights reserved.
- * Description: LZ4KD compression algorithm for ZRAM
+ * LZ4KD compression algorithm for ZRAM (Linux 6.1 standard implementation)
  */
 
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/crypto.h>
 #include <linux/vmalloc.h>
-#include <linux/lz4kd.h>
-#include <crypto/algapi.h>
 #include <crypto/internal/scompress.h>
-
+#include "lz4kd.h"
 
 struct lz4kd_ctx {
 	void *lz4kd_comp_mem;
 };
 
+static void *lz4kd_alloc_ctx(struct crypto_scomp *tfm)
+{
+	void *ctx;
+	unsigned int state_size = lz4kd_encode_state_bytes_min();
+
+	ctx = vmalloc(state_size);
+	if (!ctx)
+		return ERR_PTR(-ENOMEM);
+
+	return ctx;
+}
+
+static void lz4kd_free_ctx(struct crypto_scomp *tfm, void *ctx)
+{
+	vfree(ctx);
+}
+
 static int lz4kd_init(struct crypto_tfm *tfm)
 {
 	struct lz4kd_ctx *ctx = crypto_tfm_ctx(tfm);
 
-	ctx->lz4kd_comp_mem = vmalloc(lz4kd_encode_state_bytes_min());
-	if (!ctx->lz4kd_comp_mem)
+	ctx->lz4kd_comp_mem = lz4kd_alloc_ctx(NULL);
+	if (IS_ERR(ctx->lz4kd_comp_mem))
 		return -ENOMEM;
 
 	return 0;
@@ -32,100 +47,114 @@ static int lz4kd_init(struct crypto_tfm *tfm)
 static void lz4kd_exit(struct crypto_tfm *tfm)
 {
 	struct lz4kd_ctx *ctx = crypto_tfm_ctx(tfm);
-	vfree(ctx->lz4kd_comp_mem);
+
+	lz4kd_free_ctx(NULL, ctx->lz4kd_comp_mem);
 }
 
-static int lz4kd_compress_crypto(struct crypto_tfm *tfm, const u8 *src, unsigned int slen, u8 *dst,
-				unsigned int *dlen)
+static int __lz4kd_compress_crypto(const u8 *src, unsigned int slen,
+				   u8 *dst, unsigned int *dlen, void *ctx)
+{
+	int out_len;
+
+	out_len = lz4kd_encode(ctx, src, dst, slen, *dlen, 0);
+	if (out_len <= 0)
+		return -EINVAL;
+
+	*dlen = out_len;
+	return 0;
+}
+
+static int lz4kd_scompress(struct crypto_scomp *tfm, const u8 *src,
+			   unsigned int slen, u8 *dst, unsigned int *dlen,
+			   void *ctx)
+{
+	return __lz4kd_compress_crypto(src, slen, dst, dlen, ctx);
+}
+
+static int lz4kd_compress_crypto(struct crypto_tfm *tfm, const u8 *src,
+				 unsigned int slen, u8 *dst, unsigned int *dlen)
 {
 	struct lz4kd_ctx *ctx = crypto_tfm_ctx(tfm);
-	int ret = 0;
 
-	ret = lz4kd_encode(ctx->lz4kd_comp_mem, src, dst, slen, *dlen, 0);
-	if (ret < 0)
-		return -EINVAL;
-
-	if (ret)
-		*dlen = ret;
-
-	return 0;
+	return __lz4kd_compress_crypto(src, slen, dst, dlen, ctx->lz4kd_comp_mem);
 }
 
-static int lz4kd_decompress_crypto(struct crypto_tfm *tfm, const u8 *src, unsigned int slen, u8 *dst,
-				unsigned int *dlen)
+static int __lz4kd_decompress_crypto(const u8 *src, unsigned int slen,
+				     u8 *dst, unsigned int *dlen, void *ctx)
 {
-	int ret = 0;
+	int out_len;
 
-	ret = lz4kd_decode(src, dst, slen, *dlen);
-	if (ret <= 0)
+	out_len = lz4kd_decode(src, dst, slen, *dlen);
+	if (out_len <= 0)
 		return -EINVAL;
-	*dlen = ret;
+
+	*dlen = out_len;
 	return 0;
 }
 
-#ifdef CONFIG_CRYPTO_DELTA
-static int lz4kd_compress_delta_crypto(struct crypto_tfm *tfm, const u8 *src0, const u8 *src,
-				unsigned int slen, u8 *dst, unsigned int *dlen, unsigned int out_max)
+static int lz4kd_sdecompress(struct crypto_scomp *tfm, const u8 *src,
+			     unsigned int slen, u8 *dst, unsigned int *dlen,
+			     void *ctx)
 {
-	struct lz4kd_ctx *ctx = crypto_tfm_ctx(tfm);
-	int ret = 0;
-
-	ret = lz4kd_encode_delta(ctx->lz4kd_comp_mem, src0, src, dst, slen, *dlen, out_max);
-	if (ret < 0)
-		return -EINVAL;
-
-	if (ret)
-		*dlen = ret;
-
-	return 0;
+	return __lz4kd_decompress_crypto(src, slen, dst, dlen, NULL);
 }
 
-static int lz4kd_decompress_delta_crypto(struct crypto_tfm *tfm, const u8 *src, unsigned int slen,
-				const u8 *dst0,	u8 *dst, unsigned int *dlen)
+static int lz4kd_decompress_crypto(struct crypto_tfm *tfm, const u8 *src,
+				   unsigned int slen, u8 *dst,
+				   unsigned int *dlen)
 {
-	int ret = 0;
-
-	ret = lz4kd_decode_delta(src, dst0, dst, slen, *dlen);
-	if (ret <= 0)
-		return -EINVAL;
-	*dlen = ret;
-	return 0;
+	return __lz4kd_decompress_crypto(src, slen, dst, dlen, NULL);
 }
-#endif
 
 static struct crypto_alg alg_lz4kd = {
 	.cra_name		= "lz4kd",
 	.cra_driver_name	= "lz4kd-generic",
-#ifdef CONFIG_CRYPTO_DELTA
-	.cra_flags		= CRYPTO_ALG_TYPE_COMPRESS | CRYPTO_ALG_EXT_PROP_DELTA,
-#else
 	.cra_flags		= CRYPTO_ALG_TYPE_COMPRESS,
-#endif
 	.cra_ctxsize		= sizeof(struct lz4kd_ctx),
 	.cra_module		= THIS_MODULE,
 	.cra_init		= lz4kd_init,
 	.cra_exit		= lz4kd_exit,
 	.cra_u			= {
-	.compress = {
+		.compress = {
 			.coa_compress    = lz4kd_compress_crypto,
 			.coa_decompress  = lz4kd_decompress_crypto
-#ifdef CONFIG_CRYPTO_DELTA
-,
-			.coa_compress_delta = lz4kd_compress_delta_crypto,
-			.coa_decompress_delta = lz4kd_decompress_delta_crypto
-#endif
 		}
+	}
+};
+
+static struct scomp_alg scomp_lz4kd = {
+	.alloc_ctx		= lz4kd_alloc_ctx,
+	.free_ctx		= lz4kd_free_ctx,
+	.compress		= lz4kd_scompress,
+	.decompress		= lz4kd_sdecompress,
+	.base			= {
+		.cra_name	= "lz4kd",
+		.cra_driver_name = "lz4kd-scomp",
+		.cra_module	 = THIS_MODULE,
 	}
 };
 
 static int __init lz4kd_mod_init(void)
 {
-	return crypto_register_alg(&alg_lz4kd);
+	int ret;
+
+	ret = crypto_register_alg(&alg_lz4kd);
+	if (ret)
+		return ret;
+
+	ret = crypto_register_scomp(&scomp_lz4kd);
+	if (ret) {
+		crypto_unregister_alg(&alg_lz4kd);
+		return ret;
+	}
+
+	return 0;
 }
 
 static void __exit lz4kd_mod_fini(void)
 {
 	crypto_unregister_alg(&alg_lz4kd);
+	crypto_unregister_scomp(&scomp_lz4kd);
 }
 
 module_init(lz4kd_mod_init);
