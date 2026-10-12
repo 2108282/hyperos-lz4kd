@@ -128,13 +128,18 @@ jobs:
           echo "[+] Found build dist dir: $OUTDIR"
           ls -lh $OUTDIR/
 
-          git clone --depth=1 https://github.com/Kernel-SU/AnyKernel3 AnyKernel3
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           rm -rf AnyKernel3/.git AnyKernel3/README.md
 
+          # 写入适配小米 14 (houji) 的 GKI AnyKernel3 引导配置
+          sed -i 's/kernel.string=.*/kernel.string=Xiaomi 14 LZ4KD Kernel (GKI 6.1)/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name1=.*/device.name1=houji/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name2=.*/device.name2=shennong/g' AnyKernel3/anykernel.sh
           sed -i 's/device.name3=.*/device.name3=gki_aarch64/g' AnyKernel3/anykernel.sh
-          sed -i 's/kernel.string=.*/kernel.string=Xiaomi 14 LZ4KD Kernel/g' AnyKernel3/anykernel.sh
+          sed -i 's/BLOCK=.*/BLOCK=boot;/g' AnyKernel3/anykernel.sh
+          sed -i 's/IS_SLOT_DEVICE=.*/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
+          sed -i 's/dump_boot;/split_boot;\nflash_boot;/g' AnyKernel3/anykernel.sh
+          sed -i '/backup_file init.rc/,$d' AnyKernel3/anykernel.sh
 
           cp $OUTDIR/Image AnyKernel3/Image
 
@@ -149,8 +154,10 @@ jobs:
           name: AnyKernel3_Xiaomi14_LZ4KD
           path: AnyKernel3_Xiaomi14_LZ4KD.zip
 
-      - name: Upload Raw Kernel Image
+      - name: Upload Raw Kernel Image & Boot
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Image
-          path: AnyKernel3/Image
+          name: Raw_Kernel_and_Boot
+          path: |
+            android-kernel/dist/Image
+            android-kernel/dist/boot.img
