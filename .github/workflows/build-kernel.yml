@@ -84,6 +84,7 @@ jobs:
           echo "CONFIG_LZ4KD_COMPRESS=y" >> "$CONFIG_FILE"
           echo "CONFIG_LZ4KD_DECOMPRESS=y" >> "$CONFIG_FILE"
           echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
+          echo 'CONFIG_LOCALVERSION="-android14-11"' >> "$CONFIG_FILE" 
           echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
           echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
           echo "CONFIG_DEBUG_INFO_BTF=n" >> "$CONFIG_FILE"
@@ -105,7 +106,7 @@ jobs:
           make -j$(nproc) gki_defconfig
 
           # 精确设置版本后缀，匹配系统内 493 个外置驱动的 vermagic
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' "$CONFIG_FILE"
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' .config || true
 
           echo "Starting kernel compilation..."
           make -j$(nproc) LOCALVERSION="-android14-11" Image
@@ -113,19 +114,42 @@ jobs:
           ls -lh arch/arm64/boot/Image
           cd ..
 
-      - name: 打包 AnyKernel3 刷机包 (仅限小米14 houji)
+      - name: 打包 AnyKernel3 刷机包 (仅限小米14 houji GKI 2.0 规范)
         run: |
           echo "Cloning AnyKernel3..."
           git clone https://github.com/osm0sis/AnyKernel3.git -b master anykernel
           cd anykernel
-          
-          # 仅适配小米 14 (houji)，杜绝跨机型混用
-          sed -i 's/device.name1=.*/device.name1=houji/g' anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=/g' anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=/g' anykernel.sh
-          sed -i 's/device.name4=.*/device.name4=/g' anykernel.sh
-          sed -i 's/device.name5=.*/device.name5=/g' anykernel.sh
-          sed -i 's/is_slot_device=0/is_slot_device=1/g' anykernel.sh
+
+          cat << 'AKEOF' > anykernel.sh
+### AnyKernel3 Ramdisk Mod Script
+## osm0sis @ xda-developers & GKI 2.0
+properties() { '
+kernel.string=Xiaomi 14 (houji) GKI 6.1 with LZ4KD
+do.devicecheck=1
+do.modules=0
+do.systemless=0
+do.cleanup=1
+do.cleanuponabort=0
+device.name1=houji
+'; }
+
+block=boot;
+is_slot_device=auto;
+ramdisk_compression=auto;
+patch_vbmeta_flag=auto;
+no_magisk_check=1;
+
+. tools/ak3-core.sh;
+
+split_boot;
+
+if [ -f "$SPLITIMG/ramdisk.cpio" ]; then
+    unpack_ramdisk;
+    write_boot;
+else
+    flash_boot;
+fi;
+AKEOF
 
           cp ../common/arch/arm64/boot/Image ./Image
           zip -r9 ../AnyKernel3-Xiaomi14-houji-LZ4KD.zip * -x .git* -x README.md
