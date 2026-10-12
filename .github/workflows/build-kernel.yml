@@ -100,6 +100,13 @@ jobs:
               print("[+] Successfully registered lz4kd into zcomp.c backends[]")
           '
 
+          # 开启 ZRAM 内置编译 (CONFIG_ZRAM=y)，让驱动与菜单直接焊死进内核 Image，彻底甩掉外部模块与 system_dlkm 限制
+          sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' $GKI_ROOT/common/arch/arm64/configs/gki_defconfig
+
+          # 在 modules.bzl 中移除已内置的模块声明 (避免 Bazel 索要未生成的 .ko)
+          sed -i '/drivers\/block\/zram\/zram.ko/d' $GKI_ROOT/common/modules.bzl
+          sed -i '/mm\/zsmalloc.ko/d' $GKI_ROOT/common/modules.bzl
+
           # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题 (对标 YukongA 原版)
           if [ ! -e $GKI_ROOT/build/build.sh ]; then
             GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
@@ -168,10 +175,6 @@ jobs:
           cd ..
           ls -lh AnyKernel3_Xiaomi14_LZ4KD.zip
 
-      - name: Package LZ4KD ZRAM Driver Module
-        run: |
-          python3 package_module.py
-
       - name: Upload AnyKernel3 Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -185,10 +188,3 @@ jobs:
           path: |
             android-kernel/dist/Image
             android-kernel/dist/boot.img
-            android-kernel/dist/zram.ko
-
-      - name: Upload LZ4KD ZRAM Driver Module
-        uses: actions/upload-artifact@v4
-        with:
-          name: LZ4KD_ZRAM_Driver_Module
-          path: LZ4KD_ZRAM_Driver_Module.zip
