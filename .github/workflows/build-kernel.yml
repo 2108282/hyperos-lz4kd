@@ -49,10 +49,15 @@ jobs:
 
           clang --version
 
-      - name: 拉取 AOSP GKI 6.1 内核源码
+      - name: 拉取 AOSP GKI 6.1 内核源码 (精确锁定 6.1.138 原厂 commit)
         run: |
-          echo "Cloning AOSP android14-6.1 common kernel source..."
-          git clone --depth=1 https://android.googlesource.com/kernel/common.git -b android14-6.1 common
+          echo "Cloning AOSP android14-6.1 at exact commit 0c3d559bcd85..."
+          mkdir common && cd common
+          git init
+          git remote add origin https://android.googlesource.com/kernel/common.git
+          git fetch --depth=1 origin 0c3d559bcd85c64dae9c9c9687abbe5347fff3ad
+          git checkout FETCH_HEAD
+          cd ..
 
       - name: 注入 LZ4KD 源码与驱动补丁
         run: |
@@ -99,8 +104,11 @@ jobs:
           echo "Generating defconfig..."
           make -j$(nproc) gki_defconfig
 
+          # 精确设置版本后缀，匹配系统内 493 个外置驱动的 vermagic
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' "$CONFIG_FILE"
+
           echo "Starting kernel compilation..."
-          make -j$(nproc) Image
+          make -j$(nproc) LOCALVERSION="-android14-11" Image
 
           ls -lh arch/arm64/boot/Image
           cd ..
