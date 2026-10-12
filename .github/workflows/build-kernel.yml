@@ -86,6 +86,20 @@ jobs:
           grep -q "lz4kd" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_CRYPTO_LZ4KD) += lz4kd/\n" >> "$DRIVER_MAKEFILE"
           grep -q "lz4kd" "$DRIVER_KCONFIG" || sed -i '/endmenu/i\source "crypto/lz4kd/Kconfig"' "$DRIVER_KCONFIG"
 
+          # 注册 lz4kd 到 ZRAM 原生静态菜单 backends[] 列表 (让 Scene 等工具直接在列表中识别到 lz4kd)
+          python3 -c '
+          zcomp_file = "'$GKI_ROOT'/common/drivers/block/zram/zcomp.c"
+          with open(zcomp_file, "r") as f:
+              content = f.read()
+          target = """#if IS_ENABLED(CONFIG_CRYPTO_ZSTD)\n\t\"zstd\",\n#endif"""
+          replacement = target + """\n#if IS_ENABLED(CONFIG_CRYPTO_LZ4KD)\n\t\"lz4kd\",\n#endif"""
+          if target in content and "CONFIG_CRYPTO_LZ4KD" not in content:
+              content = content.replace(target, replacement, 1)
+              with open(zcomp_file, "w") as f:
+                  f.write(content)
+              print("[+] Successfully registered lz4kd into zcomp.c backends[]")
+          '
+
           # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题 (对标 YukongA 原版)
           if [ ! -e $GKI_ROOT/build/build.sh ]; then
             GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
