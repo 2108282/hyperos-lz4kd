@@ -9,7 +9,7 @@
 #include <linux/module.h>
 #include <linux/crypto.h>
 #include <linux/vmalloc.h>
-#include <crypto/internal/scomp.h>
+#include <crypto/internal/scompress.h>
 #include "lz4kd.h"
 
 struct lz4kd_ctx {
