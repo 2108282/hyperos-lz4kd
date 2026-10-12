@@ -1,0 +1,6 @@
+config CRYPTO_LZ4KD
+	tristate "LZ4KD compression algorithm"
+	select CRYPTO_ALGAPI
+	select CRYPTO_SCOMP
+	help
+	  LZ4KD (LZ4K 4KB page + Delta) compression algorithm for ZRAM.
