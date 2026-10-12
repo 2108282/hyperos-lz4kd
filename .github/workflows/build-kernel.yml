@@ -93,13 +93,6 @@ jobs:
           rm -f common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i '/^[[:space:]]*"protected_exports_list"/d' common/BUILD.bazel 2>/dev/null || true
 
-          # 消除 Bazel savedefconfig 检查拦截
-          grep -rn "savedefconfig does not match" build/ 2>/dev/null | cut -d: -f1 | sort -u | while read f; do
-            echo "[+] Patching defconfig check in $f"
-            sed -i 's/ERROR: savedefconfig does not match/INFO: savedefconfig does not match/g' "$f" || true
-            sed -i '/savedefconfig does not match/!b;n;c\exit 0' "$f" 2>/dev/null || true
-          done || true
-
       - name: Clean Working Directory to Avoid -dirty Version
         working-directory: android-kernel
         run: |
