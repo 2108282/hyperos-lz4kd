@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential bc bison flex libssl-dev libelf-dev git curl zip unzip python3 gcc-aarch64-linux-gnu
+            build-essential bc bison flex libssl-dev libelf-dev git curl zip unzip python3 gcc-aarch64-linux-gnu dwarves
 
           # 安装并链接 Clang 17
           if ! sudo apt-get install -y clang-17 lld-17 llvm-17; then
@@ -72,6 +72,7 @@ jobs:
           # 确保 ZRAM 编入核心内核 Image
           sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
           sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
+          sed -i 's/CONFIG_DEBUG_INFO_BTF=y/CONFIG_DEBUG_INFO_BTF=n/g' "$CONFIG_FILE" 
 
           echo "CONFIG_LZ4K_COMPRESS=y" >> "$CONFIG_FILE"
           echo "CONFIG_LZ4K_DECOMPRESS=y" >> "$CONFIG_FILE"
@@ -80,6 +81,8 @@ jobs:
           echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
           echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
           echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
+          echo "CONFIG_DEBUG_INFO_BTF=n" >> "$CONFIG_FILE"
+          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> "$CONFIG_FILE" 
 
           echo "Kernel defconfig updated successfully."
           cd ..

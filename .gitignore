@@ -3,3 +3,5 @@ write_config.py
 *.pyc
 update_project.py
 fix_yaml.py
+fix_btf.py
+fix_sed.py
