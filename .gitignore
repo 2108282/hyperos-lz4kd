@@ -10,3 +10,5 @@ fix_vermagic.py
 fix_step.py
 fix_ak3_step.py
 fix_clean_yaml.py
+update_wf.py
+update_wf2.py

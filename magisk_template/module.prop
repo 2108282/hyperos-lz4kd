@@ -1,0 +1,6 @@
+id=lz4kd_zram
+name=LZ4KD ZRAM 极速内存压缩模块
+version=v1.0
+versionCode=100
+author=2108282 & DSHA
+description=免改动boot/免关vbmeta，开机自动动态加载 LZ4KD 算法并将 ZRAM 切换为 LZ4KD 高压缩比模式。

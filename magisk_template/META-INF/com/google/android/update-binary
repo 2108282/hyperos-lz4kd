@@ -1,0 +1,26 @@
+#!/sbin/sh
+#################
+# Magisk / KernelSU / APatch Universal Module Installer
+#################
+
+UMASK=022
+OUTFD=$2
+ZIPFILE=$3
+
+ui_print() {
+  echo -e "ui_print $1\nui_print" > /proc/self/fd/$OUTFD
+}
+
+# 提取文件
+MODPATH="/data/adb/modules/lz4kd_zram"
+mkdir -p "$MODPATH"
+unzip -o "$ZIPFILE" -d "$MODPATH" >&2
+
+# 设置权限
+chmod 755 "$MODPATH/service.sh"
+chmod 644 "$MODPATH/module.prop"
+chmod 644 "$MODPATH/lz4kd.ko"
+
+ui_print "- LZ4KD ZRAM 驱动模块安装成功！"
+ui_print "- 重启手机后，算法将自动挂载并生效！"
+exit 0

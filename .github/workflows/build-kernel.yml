@@ -1,4 +1,4 @@
-name: Build Xiaomi 14 (houji) GKI 6.1 with LZ4KD
+name: Build LZ4KD Universal Kernel Module (Magisk / KSU)
 
 permissions:
   contents: write
@@ -10,9 +10,9 @@ on:
       - main
 
 jobs:
-  build:
+  build-module:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - name: 检出仓库代码
         uses: actions/checkout@v4
@@ -26,13 +26,12 @@ jobs:
           sudo docker image prune --all --force || true
           df -h
 
-      - name: 安装基础编译依赖与 Clang 17 工具链
+      - name: 安装编译工具链与依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential bc bison flex libssl-dev libelf-dev git curl zip unzip python3 gcc-aarch64-linux-gnu dwarves
 
-          # 确保 Clang 17 软链接
           if ! sudo apt-get install -y clang-17 lld-17 llvm-17; then
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
@@ -49,7 +48,7 @@ jobs:
 
           clang --version
 
-      - name: 拉取 AOSP GKI 6.1 内核源码 (锁定 0c3d559bcd85 原厂基线)
+      - name: 拉取 AOSP GKI 6.1 内核源码树 (锁定 0c3d559bcd85 原厂基线)
         run: |
           echo "Cloning AOSP android14-6.1 at exact commit 0c3d559bcd85..."
           mkdir common && cd common
@@ -59,36 +58,33 @@ jobs:
           git checkout FETCH_HEAD
           cd ..
 
-      - name: 注入 LZ4KD 源码与驱动补丁
+      - name: 注入 LZ4KD 模块代码到内核驱动树
         run: |
-          echo "Injecting LZ4K and LZ4KD source files..."
-          cp -rf lz4k_src/include/linux/* common/include/linux/
-          cp -rf lz4k_src/lib/* common/lib/
-          cp -rf lz4k_src/crypto/* common/crypto/
+          echo "Injecting lz4kd_module into kernel tree..."
+          cp -rf lz4kd_module common/crypto/lz4kd
+          echo 'obj-m += lz4kd/' >> common/crypto/Makefile
 
-          echo "Applying LZ4KD patches via python injector..."
-          python3 apply_lz4kd.py
-
-      - name: 加载小米 14 原厂 100% 满血配置 (2162项完整底包)
+      - name: 准备内核模块编译环境
         run: |
           cd common
-          # 直接使用从真机提取的原厂满血配置，不再使用残缺的 gki_defconfig
-          cp ../xiaomi14_houji_full.config .config
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export LLVM=1
+          export LLVM_IAS=1
+
+          make -j$(nproc) gki_defconfig
           
-          # 精确设置版本后缀，匹配系统内 493 个外置驱动的 vermagic
+          # 精确设置版本后缀与配置
           sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' .config
-
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export LLVM=1
-          export LLVM_IAS=1
-
-          echo "Refreshing config with olddefconfig..."
-          make olddefconfig
+          sed -i 's/CONFIG_DEBUG_INFO_BTF=y/CONFIG_DEBUG_INFO_BTF=n/g' .config
+          echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
+          
+          # 准备模块构建基础设施
+          make -j$(nproc) modules_prepare
           cd ..
 
-      - name: 编译满血 GKI 内核 (Image)
+      - name: 编译 lz4kd.ko 内核模块
         run: |
           cd common
           export ARCH=arm64
@@ -97,48 +93,47 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
 
-          echo "Starting full kernel compilation..."
-          make -j$(nproc) Image
+          echo "Compiling lz4kd.ko module..."
+          make -j$(nproc) M=crypto/lz4kd modules
 
-          ls -lh arch/arm64/boot/Image
+          ls -lh crypto/lz4kd/lz4kd.ko
           cd ..
 
-      - name: 打包 AnyKernel3 刷机包 (仅限小米14 houji GKI 2.0 规范)
+      - name: 组装 Magisk / KernelSU 通用刷机模块包
         run: |
-          echo "Cloning AnyKernel3..."
-          git clone https://github.com/osm0sis/AnyKernel3.git -b master anykernel
-          cd anykernel
-          cp ../anykernel_template.sh ./anykernel.sh
-          cp ../common/arch/arm64/boot/Image ./Image
-          zip -r9 ../AnyKernel3-Xiaomi14-houji-LZ4KD.zip * -x .git* -x README.md
+          echo "Assembling universal module zip..."
+          cp common/crypto/lz4kd/lz4kd.ko magisk_template/
+          cd magisk_template
+          zip -r9 ../LZ4KD-ZRAM-Universal-Module.zip *
           cd ..
-          ls -lh AnyKernel3-Xiaomi14-houji-LZ4KD.zip
+          ls -lh LZ4KD-ZRAM-Universal-Module.zip
 
-      - name: 上传构建产物 (Artifacts)
+      - name: 上传模块产物 (Artifacts)
         uses: actions/upload-artifact@v4
         with:
-          name: Xiaomi14-houji-LZ4KD-Kernel
+          name: LZ4KD-ZRAM-Universal-Module
           path: |
-            AnyKernel3-Xiaomi14-houji-LZ4KD.zip
-            common/arch/arm64/boot/Image
+            LZ4KD-ZRAM-Universal-Module.zip
+            common/crypto/lz4kd/lz4kd.ko
 
       - name: 发布 GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
-          tag_name: GKI-6.1-LZ4KD-${{ github.run_number }}
-          name: Xiaomi 14 (houji) GKI 6.1 LZ4KD Build #${{ github.run_number }}
+          tag_name: LZ4KD-Module-${{ github.run_number }}
+          name: LZ4KD ZRAM Universal Module Build #${{ github.run_number }}
           body: |
-            ## 小米 14 (houji 专用) GKI 6.1 + LZ4KD 满血内核
+            ## LZ4KD ZRAM 极速内存压缩模块 (Magisk / KernelSU / APatch 通用版)
 
-            - **目标机型**：仅限小米 14 (houji)
-            - **配置基底**：100% 继承小米原厂真实运行配置（2162 项），绝非残缺 gki_defconfig
-            - **版本号**：精确匹配 6.1.138-android14-11
-            - **产物文件**：
-              - AnyKernel3-Xiaomi14-houji-LZ4KD.zip (手机端卡刷包)
-              - Image (内核二进制)
+            - **适配架构**：Android 14 GKI 6.1 通用内核 (高通骁龙 8 Gen 3 等)
+            - **特性**：
+              - 纯用户态动态挂载（insmod），**完全不碰 boot 分区**
+              - **完全不需要关闭 vbmeta 签名**，手机数据 **100% 绝对零风险**
+              - 开机自启服务自动挂载驱动并重置接管 ZRAM 为 `[lz4kd]` 模式
+            - **安装方法**：
+              直接在 Magisk / KernelSU / APatch 界面点击“从本地安装”刷入即可，无需进 Recovery 或 Fastboot！
           files: |
-            AnyKernel3-Xiaomi14-houji-LZ4KD.zip
-            common/arch/arm64/boot/Image
+            LZ4KD-ZRAM-Universal-Module.zip
+            common/crypto/lz4kd/lz4kd.ko
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
