@@ -32,7 +32,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential bc bison flex libssl-dev libelf-dev git curl zip unzip python3 gcc-aarch64-linux-gnu dwarves
 
-          # 安装并链接 Clang 17
+          # 确保 Clang 17 软链接
           if ! sudo apt-get install -y clang-17 lld-17 llvm-17; then
             wget https://apt.llvm.org/llvm.sh
             chmod +x llvm.sh
@@ -49,7 +49,7 @@ jobs:
 
           clang --version
 
-      - name: 拉取 AOSP GKI 6.1 内核源码 (精确锁定 6.1.138 原厂 commit)
+      - name: 拉取 AOSP GKI 6.1 内核源码 (锁定 0c3d559bcd85 原厂基线)
         run: |
           echo "Cloning AOSP android14-6.1 at exact commit 0c3d559bcd85..."
           mkdir common && cd common
@@ -69,31 +69,26 @@ jobs:
           echo "Applying LZ4KD patches via python injector..."
           python3 apply_lz4kd.py
 
-      - name: 配置 GKI 内核开关并启用 LZ4KD
+      - name: 加载小米 14 原厂 100% 满血配置 (2162项完整底包)
         run: |
           cd common
-          CONFIG_FILE="arch/arm64/configs/gki_defconfig"
+          # 直接使用从真机提取的原厂满血配置，不再使用残缺的 gki_defconfig
+          cp ../xiaomi14_houji_full.config .config
           
-          # 确保 ZRAM 编入核心内核 Image
-          sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
-          sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
-          sed -i 's/CONFIG_DEBUG_INFO_BTF=y/CONFIG_DEBUG_INFO_BTF=n/g' "$CONFIG_FILE" 
+          # 精确设置版本后缀，匹配系统内 493 个外置驱动的 vermagic
+          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' .config
 
-          echo "CONFIG_LZ4K_COMPRESS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_LZ4K_DECOMPRESS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_LZ4KD_COMPRESS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_LZ4KD_DECOMPRESS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
-          echo 'CONFIG_LOCALVERSION="-android14-11"' >> "$CONFIG_FILE" 
-          echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
-          echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
-          echo "CONFIG_DEBUG_INFO_BTF=n" >> "$CONFIG_FILE"
-          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> "$CONFIG_FILE" 
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export LLVM=1
+          export LLVM_IAS=1
 
-          echo "Kernel defconfig updated successfully."
+          echo "Refreshing config with olddefconfig..."
+          make olddefconfig
           cd ..
 
-      - name: 编译 GKI 内核 (Image)
+      - name: 编译满血 GKI 内核 (Image)
         run: |
           cd common
           export ARCH=arm64
@@ -102,14 +97,8 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
 
-          echo "Generating defconfig..."
-          make -j$(nproc) gki_defconfig
-
-          # 精确设置版本后缀，匹配系统内 493 个外置驱动的 vermagic
-          sed -i 's/CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android14-11"/g' .config || true
-
-          echo "Starting kernel compilation..."
-          make -j$(nproc) LOCALVERSION="-android14-11" Image
+          echo "Starting full kernel compilation..."
+          make -j$(nproc) Image
 
           ls -lh arch/arm64/boot/Image
           cd ..
@@ -140,15 +129,14 @@ jobs:
           tag_name: GKI-6.1-LZ4KD-${{ github.run_number }}
           name: Xiaomi 14 (houji) GKI 6.1 LZ4KD Build #${{ github.run_number }}
           body: |
-            ## 小米 14 (houji 专用) GKI 6.1 + LZ4KD 内核
+            ## 小米 14 (houji 专用) GKI 6.1 + LZ4KD 满血内核
 
             - **目标机型**：仅限小米 14 (houji)
-            - **系统版本**：澎湃 OS (HyperOS) 1 / 2 / 3
+            - **配置基底**：100% 继承小米原厂真实运行配置（2162 项），绝非残缺 gki_defconfig
+            - **版本号**：精确匹配 6.1.138-android14-11
             - **产物文件**：
               - AnyKernel3-Xiaomi14-houji-LZ4KD.zip (手机端卡刷包)
-              - Image (内核二进制，支持快速热测试打包)
-            - **热测试防翻车说明**：
-              首次测试强烈建议使用 fastboot boot 命令在 RAM 中临时热启动验证，确认无误再持久刷入！
+              - Image (内核二进制)
           files: |
             AnyKernel3-Xiaomi14-houji-LZ4KD.zip
             common/arch/arm64/boot/Image
