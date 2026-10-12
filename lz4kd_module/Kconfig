@@ -1,5 +1,6 @@
 config CRYPTO_LZ4KD
 	tristate "LZ4KD compression algorithm"
+	default y
 	select CRYPTO_ALGAPI
 	select CRYPTO_SCOMP
 	help

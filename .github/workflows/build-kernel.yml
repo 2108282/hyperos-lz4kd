@@ -78,11 +78,7 @@ jobs:
           grep -q "lz4kd" "$DRIVER_MAKEFILE" || printf "\nobj-\$(CONFIG_CRYPTO_LZ4KD) += lz4kd/\n" >> "$DRIVER_MAKEFILE"
           grep -q "lz4kd" "$DRIVER_KCONFIG" || sed -i '/endmenu/i\source "crypto/lz4kd/Kconfig"' "$DRIVER_KCONFIG"
 
-          # 开启内置配置
-          GKI_DEFCONFIG=$GKI_ROOT/common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_CRYPTO_LZ4KD=y" >> $GKI_DEFCONFIG
-
-          # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题
+          # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题 (对标 YukongA 原版)
           if [ ! -e $GKI_ROOT/build/build.sh ]; then
             GLIBC_VERSION=$(ldd --version 2>/dev/null | head -n 1 | awk '{print $NF}')
             if [ "$(printf '%s\n' "2.38" "$GLIBC_VERSION" | sort -V | head -n1)" = "2.38" ]; then
@@ -93,14 +89,9 @@ jobs:
       - name: Symbol and ABI Protection Removal
         working-directory: android-kernel
         run: |
-          echo "[+] Removing protected exports to support OEM vendor modules"
+          echo "[+] Removing protected exports to support OEM vendor modules (YukongA standard)"
           rm -f common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           sed -i '/^[[:space:]]*"protected_exports_list"/d' common/BUILD.bazel 2>/dev/null || true
-
-          # 确保不裁剪符号，导出全量符号给高通外置驱动
-          echo "CONFIG_TRIM_UNUSED_KSYMS=n" >> common/arch/arm64/configs/gki_defconfig
-          echo 'CONFIG_UNUSED_KSYMS_WHITELIST=""' >> common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEBUG_INFO_BTF=n" >> common/arch/arm64/configs/gki_defconfig
 
       - name: Clean Working Directory to Avoid -dirty Version
         working-directory: android-kernel
@@ -114,10 +105,10 @@ jobs:
         run: |
           if [ -e build/build.sh ]; then
             echo "[+] Building with build/build.sh"
-            BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang" || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
+            BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
           else
             echo "[+] Building with Kleaf / Bazel"
-            tools/bazel run --cache_dir=/home/runner/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist || echo "COMPILE_KERNEL=false" >>$GITHUB_ENV
+            tools/bazel run --cache_dir=/home/runner/.cache/bazel --check_defconfig=false --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
           fi
 
       - name: Package AnyKernel3 Flashable Zip
