@@ -169,6 +169,13 @@ jobs:
           cd ..
           ls -lh AnyKernel3_Xiaomi14_LZ4KD.zip
 
+      - name: Package LZ4KD ZRAM Auto Switch Module
+        run: |
+          cd module_auto_switch
+          zip -r9 ../LZ4KD_ZRAM_Auto_Switch.zip *
+          cd ..
+          ls -lh LZ4KD_ZRAM_Auto_Switch.zip
+
       - name: Upload AnyKernel3 Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -183,3 +190,9 @@ jobs:
             android-kernel/dist/Image
             android-kernel/dist/boot.img
             android-kernel/dist/zram.ko
+
+      - name: Upload LZ4KD Auto Switch Module
+        uses: actions/upload-artifact@v4
+        with:
+          name: LZ4KD_ZRAM_Auto_Switch
+          path: LZ4KD_ZRAM_Auto_Switch.zip

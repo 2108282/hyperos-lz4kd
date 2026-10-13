@@ -1,0 +1,6 @@
+id=lz4kd_zram_auto
+name=Xiaomi 14 LZ4KD ZRAM Auto Switch
+version=v1.0
+versionCode=100
+author=KernelBuilder
+description=Automatically switches ZRAM compression algorithm to LZ4KD on boot.
