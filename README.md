@@ -22,7 +22,7 @@
 从 Android 12 / 13 起，Google 全面推行 **GKI 2.0（Generic Kernel Image）** 规范：
 1. **内核本体解耦**：核心调度、虚拟内存管理、Crypto 算法库统一集成在核心 `Image`（存放在 `boot.img` 分区）中。
 2. **厂商驱动外挂**：主板时钟树、SMMU、总线互联、GPU、声卡以及部分平台组件（如 `zram.ko`）作为动态加载驱动，存放在 `vendor_dlkm` 或 `system_dlkm` 分区中。
-3. **AVB 签名与 Bootloader**：在 Bootloader 解锁（Orange State）后，AVB 允许引导非原厂签名的内核，**绝不需要关闭 vbmeta 验证，更严禁抹除用户数据（Wipe Data）！**
+3. **AVB 签名与 Bootloader**：在 Bootloader 解锁（Orange State）后，AVB 允许引导非原厂签名的内核，**不需要关闭 vbmeta 验证**
 
 ---
 
@@ -127,9 +127,9 @@ static int __init lz4kd_mod_init(void) {
 
 ---
 
-## 四、 正统工业级云端构建流水线 (GitHub Actions + ACK)
+## 四、 构建流水线 (GitHub Actions + ACK)
 
-本工作流基于官方 AOSP ACK（Android Common Kernel）和 TWRP 核心维护者 YukongA 的工业级标准构建，并在全流程中完整吸收了全部避坑补丁：
+本工作流基于官方 AOSP ACK（Android Common Kernel）和 TWRP 核心维护者 YukongA 的标准构建并完善补丁：
 
 ```yaml
 name: Build Universal GKI LZ4KD Kernel from ACK
