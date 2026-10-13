@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/crypto.h>
 #include <linux/vmalloc.h>
+#include <linux/string.h>
 #include <crypto/internal/scompress.h>
 #include "lz4kd.h"
 
@@ -58,8 +59,17 @@ static int __lz4kd_compress_crypto(const u8 *src, unsigned int slen,
 	int out_len;
 
 	out_len = lz4kd_encode(ctx, src, dst, slen, *dlen, 0);
-	if (out_len <= 0)
-		return -EINVAL;
+	if (out_len <= 0 || out_len >= slen) {
+		/*
+		 * 数据不可压缩 (Incompressible) 或压缩后体积膨胀：
+		 * 必须将原样数据拷贝至目标缓冲区并设置 *dlen = slen，正常返回 0。
+		 * ZRAM 检测到 comp_len >= huge_class_size 后，会自动打上 ZRAM_HUGE 标记原样存入内存池，
+		 * 读取时直接按原始页面还原，绝不触发解压，彻底杜绝 ExtM: Compression failed! err=-22 报错。
+		 */
+		memcpy(dst, src, slen);
+		*dlen = slen;
+		return 0;
+	}
 
 	*dlen = out_len;
 	return 0;
@@ -85,8 +95,13 @@ static int __lz4kd_decompress_crypto(const u8 *src, unsigned int slen,
 	int out_len;
 
 	out_len = lz4kd_decode(src, dst, slen, *dlen);
-	if (out_len <= 0)
+	if (out_len <= 0) {
+		if (slen == *dlen) {
+			memcpy(dst, src, slen);
+			return 0;
+		}
 		return -EINVAL;
+	}
 
 	*dlen = out_len;
 	return 0;
