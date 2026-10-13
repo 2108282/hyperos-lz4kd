@@ -100,12 +100,8 @@ jobs:
               print("[+] Successfully registered lz4kd into zcomp.c backends[]")
           '
 
-          # 开启 ZRAM 内置编译 (CONFIG_ZRAM=y)，让驱动与菜单直接焊死进内核 Image，彻底甩掉外部模块与 system_dlkm 限制
-          sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' $GKI_ROOT/common/arch/arm64/configs/gki_defconfig
-
-          # 在 modules.bzl 中移除已内置的模块声明 (避免 Bazel 索要未生成的 .ko)
-          sed -i '/drivers\/block\/zram\/zram.ko/d' $GKI_ROOT/common/modules.bzl
-          sed -i '/mm\/zsmalloc.ko/d' $GKI_ROOT/common/modules.bzl
+          # 确保华为 LZ4KD 算法内置编译进内核 Image (CONFIG_CRYPTO_LZ4KD=y)
+          echo "CONFIG_CRYPTO_LZ4KD=y" >> $GKI_ROOT/common/arch/arm64/configs/gki_defconfig
 
           # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题 (对标 YukongA 原版)
           if [ ! -e $GKI_ROOT/build/build.sh ]; then
@@ -188,3 +184,4 @@ jobs:
           path: |
             android-kernel/dist/Image
             android-kernel/dist/boot.img
+            android-kernel/dist/zram.ko
