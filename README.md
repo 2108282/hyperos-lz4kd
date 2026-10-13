@@ -249,24 +249,27 @@ jobs:
           git add -A
           git commit -a -m "Add LZ4KD compression algorithm" || true
 
-      # 8. 编译 Image
-      - name: Build ACK Kernel Image
-        working-directory: android-kernel
+      # 8. 产物上传 (只交付纯血核心与一键缝合工具，剔除无用 64MB 假 boot 和鸡肋 AnyKernel3)
+      - name: Prepare Kernel Image and Repack Tool Artifacts
         run: |
-          if [ -e build/build.sh ]; then
-            BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image LTO=thin build/build.sh CC="/usr/bin/ccache clang"
-          else
-            tools/bazel run --cache_dir=$GITHUB_WORKSPACE/.cache/bazel --config=fast --config=stamp --lto=thin //common:kernel_aarch64_dist -- --dist_dir=dist
-          fi
+          mkdir -p release_kernel
+          cp -f $OUTDIR/Image release_kernel/
+          cp -f $OUTDIR/zram.ko release_kernel/ 2>/dev/null || true
+          cp -f tools_arm64/magiskboot release_kernel/
+          cp -f repack_boot.sh release_kernel/
+          chmod +x release_kernel/magiskboot release_kernel/repack_boot.sh
 
-      # 9. 产物上传 (归档 Image 与全套制品)
-      - name: Upload Raw Kernel Image & Dist
+      - name: Upload Kernel Image and Repack Tool
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Dist_Artifacts
-          path: |
-            android-kernel/dist/Image
-            android-kernel/dist/boot.img
+          name: Kernel_Image_and_Repack_Tool
+          path: release_kernel/
+
+      - name: Upload LZ4KD Auto Switch Module
+        uses: actions/upload-artifact@v4
+        with:
+          name: LZ4KD_ZRAM_Auto_Switch
+          path: LZ4KD_ZRAM_Auto_Switch.zip
 ```
 
 ---
@@ -327,27 +330,20 @@ jobs:
 
 无论针对什么机型，最优雅、对系统零破坏且 100% 保留原有 TWRP 与开机引导的方案，就是在本地通过 **64 位 `magiskboot`** 进行继承式缝合：
 
+### 1. 使用仓库自带脚本一键缝合（最推荐）
+
+仓库已内置开箱即用的自动缝合脚本 `repack_boot.sh`，内部已集成全部解包、替换、重封包与 100,663,296 字节校验逻辑：
+
 ```bash
-# 1. 准备独立缝合目录与资产
-mkdir -p /tmp/repack_workspace && cd /tmp/repack_workspace
-cp /path/to/stock_boot.img ./stock_boot.img   # 96MB 原厂底包 (内置 TWRP)
-cp /path/to/magiskboot_64 ./magiskboot        # 纯 64 位 magiskboot 工具
-chmod 755 ./magiskboot
+# 只要将原装救砖底包 boot.img 放在同一目录下，直接运行即可：
+sh repack_boot.sh
 
-# 2. 解包原装底包 (提取 Header v4 引导结构、Cmdline 和 VBMETA 签名链)
-./magiskboot unpack stock_boot.img
-# 回显应显示：HEADER_VER [4], KERNEL_SZ [...], VBMETA
-
-# 3. 将云端编译出的新内核二进制覆盖 kernel
-cp -f /path/to/Image ./kernel
-
-# 4. 继承原厂所有结构重新封包
-./magiskboot repack stock_boot.img final_lz4kd_boot.img
-# 回显应显示：Repack to boot image: [final_lz4kd_boot.img]
-
-# 5. 校验字节尺寸 (必须与原装 100,663,296 字节完全一致)
-stat -c "%s %n" stock_boot.img final_lz4kd_boot.img
+# 也支持指定任意路径：
+sh repack_boot.sh /path/to/stock_boot.img /path/to/Image /path/to/final_boot.img
 ```
+脚本将自动调用 64 位 `magiskboot`，在 1 秒内输出结构严谨对齐的 `final_lz4kd_boot.img`！
+
+### 2. 底层手工分步缝合原理 (SOP)
 
 刷入方式：
 * 在 TWRP 中切换为【安装镜像】-> 选择 `final_lz4kd_boot.img` -> 勾选【Boot】滑动刷入；

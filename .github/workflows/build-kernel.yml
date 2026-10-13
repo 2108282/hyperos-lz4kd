@@ -134,41 +134,6 @@ jobs:
             tools/bazel run --cache_dir=$GITHUB_WORKSPACE/.cache/bazel --config=fast --config=stamp --lto=thin --jobs=2 --local_ram_resources=6144 //common:kernel_aarch64_dist -- --dist_dir=dist
           fi
 
-      - name: Package AnyKernel3 Flashable Zip
-        run: |
-          OUTDIR=android-kernel/out/*/dist
-          if [ ! -e $OUTDIR ]; then
-            OUTDIR=android-kernel/dist
-          fi
-          echo "[+] Found build dist dir: $OUTDIR"
-          ls -lh $OUTDIR/
-
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          rm -rf AnyKernel3/.git AnyKernel3/README.md
-
-          # 针对高通骁龙 8 Gen 3 纯 64 位平台替换 AArch64 工具链 (彻底消除 Busybox setup failed)
-          cp -f tools_arm64/busybox AnyKernel3/tools/busybox
-          cp -f tools_arm64/magiskboot AnyKernel3/tools/magiskboot
-          cp -f tools_arm64/magiskpolicy AnyKernel3/tools/magiskpolicy
-          chmod 755 AnyKernel3/tools/*
-
-          # 写入适配小米 14 (houji) 的 GKI AnyKernel3 引导配置
-          sed -i 's/kernel.string=.*/kernel.string=Xiaomi 14 LZ4KD Kernel (GKI 6.1)/g' AnyKernel3/anykernel.sh
-          sed -i 's/device.name1=.*/device.name1=houji/g' AnyKernel3/anykernel.sh
-          sed -i 's/device.name2=.*/device.name2=shennong/g' AnyKernel3/anykernel.sh
-          sed -i 's/device.name3=.*/device.name3=gki_aarch64/g' AnyKernel3/anykernel.sh
-          sed -i 's/BLOCK=.*/BLOCK=boot;/g' AnyKernel3/anykernel.sh
-          sed -i 's/IS_SLOT_DEVICE=.*/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
-          sed -i 's/dump_boot;/split_boot;\nflash_boot;/g' AnyKernel3/anykernel.sh
-          sed -i '/backup_file init.rc/,$d' AnyKernel3/anykernel.sh
-
-          cp $OUTDIR/Image AnyKernel3/Image
-
-          cd AnyKernel3
-          zip -r9 ../AnyKernel3_Xiaomi14_LZ4KD.zip *
-          cd ..
-          ls -lh AnyKernel3_Xiaomi14_LZ4KD.zip
-
       - name: Package LZ4KD ZRAM Auto Switch Module
         run: |
           cd module_auto_switch
@@ -176,20 +141,25 @@ jobs:
           cd ..
           ls -lh LZ4KD_ZRAM_Auto_Switch.zip
 
-      - name: Upload AnyKernel3 Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AnyKernel3_Xiaomi14_LZ4KD
-          path: AnyKernel3_Xiaomi14_LZ4KD.zip
+      - name: Prepare Kernel Image and Repack Tool Artifacts
+        run: |
+          OUTDIR=android-kernel/out/*/dist
+          if [ ! -e $OUTDIR ]; then
+            OUTDIR=android-kernel/dist
+          fi
+          mkdir -p release_kernel
+          cp -f $OUTDIR/Image release_kernel/
+          cp -f $OUTDIR/zram.ko release_kernel/ 2>/dev/null || true
+          cp -f tools_arm64/magiskboot release_kernel/
+          cp -f repack_boot.sh release_kernel/
+          chmod +x release_kernel/magiskboot release_kernel/repack_boot.sh
+          ls -lh release_kernel/
 
-      - name: Upload Raw Kernel Image & Boot
+      - name: Upload Kernel Image and Repack Tool
         uses: actions/upload-artifact@v4
         with:
-          name: Raw_Kernel_and_Boot
-          path: |
-            android-kernel/dist/Image
-            android-kernel/dist/boot.img
-            android-kernel/dist/zram.ko
+          name: Kernel_Image_and_Repack_Tool
+          path: release_kernel/
 
       - name: Upload LZ4KD Auto Switch Module
         uses: actions/upload-artifact@v4
