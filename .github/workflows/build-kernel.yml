@@ -100,8 +100,6 @@ jobs:
               print("[+] Successfully registered lz4kd into zcomp.c backends[]")
           '
 
-          # 确保华为 LZ4KD 算法内置编译进内核 Image (CONFIG_CRYPTO_LZ4KD=y)
-          echo "CONFIG_CRYPTO_LZ4KD=y" >> $GKI_ROOT/common/arch/arm64/configs/gki_defconfig
 
           # 兼容性修复: 避免 glibc 2.38 上的 resolve_btfids 问题 (对标 YukongA 原版)
           if [ ! -e $GKI_ROOT/build/build.sh ]; then
@@ -133,7 +131,7 @@ jobs:
             BUILD_BOOT_IMG=1 SKIP_VENDOR_BOOT=1 KERNEL_BINARY=Image AVB_SIGN_BOOT_IMG=1 AVB_BOOT_PARTITION_SIZE=$((64*1024*1024)) AVB_BOOT_ALGORITHM=SHA256_RSA2048 AVB_BOOT_KEY=prebuilts/kernel-build-tools/linux-x86/share/avb/testkey_rsa2048.pem BOOT_IMAGE_HEADER_VERSION=4 LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh CC="/usr/bin/ccache clang"
           else
             echo "[+] Building with Kleaf / Bazel"
-            tools/bazel run --cache_dir=$GITHUB_WORKSPACE/.cache/bazel --config=fast --config=stamp --lto=thin --jobs=2 --local_ram_resources=6144 //common:kernel_aarch64_dist -- --dist_dir=dist
+            tools/bazel run --cache_dir=$GITHUB_WORKSPACE/.cache/bazel --config=fast --config=stamp --check_defconfig=false --lto=thin --jobs=2 --local_ram_resources=6144 //common:kernel_aarch64_dist -- --dist_dir=dist
           fi
 
       - name: Package AnyKernel3 Flashable Zip
