@@ -351,7 +351,7 @@ sh repack_boot.sh /path/to/stock_boot.img /path/to/Image /path/to/final_boot.img
 
 ---
 
-## 七、 开机验收、Scene 界面接管与性能验证
+## 七、 开机
 
 ### 1. 刷入配套的magisk模块，开机自动切换zram压缩方案
 开机后在终端执行：
