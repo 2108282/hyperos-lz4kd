@@ -274,7 +274,7 @@ jobs:
 
 ---
 
-## 五、 全生命周期 12 大血泪踩坑复盘与根本原因剖析
+## 五、 复盘与原因剖析
 
 在实际推进过程中，任何一个细节的偏差都会直接导致编译中断、死机断电或无法生效。以下 12 大致命坑是全机型定制的核心教训：
 
@@ -290,8 +290,8 @@ jobs:
 * **致命原因**：高通 8 Gen 3 等新平台开启了硬件级 **kCFI（内核控制流完整性保护）**。外部单独编译的模块函数指针前缺失 4 字节类型哈希，函数指针一被内核调用，CPU 直接触发硬件 `BRK` 保护，PMIC 瞬间切断供电。
 * **规避原则**：**LZ4KD 必须同源内置编译（Built-in）进内核本体 `Image`**，绝不能作为孤立外挂模块加载。
 
-### 4. 误信“更换内核必须关闭 vbmeta 签名与抹除数据”
-* **致命真相**：Bootloader 解锁（Orange State）后，AVB 验证级别已经放开，**允许引导第三方内核**！无论更换内核还是缝合 boot，**绝不需要关闭 vbmeta，更绝不需要清空用户数据（Wipe Data）！**
+### 4. 不需要关闭 vbmeta”
+* **致命真相**：Bootloader 解锁（Orange State）后，AVB 验证级别已经放开，**允许引导第三方内核**！无论更换内核还是缝合 boot，**不需要关闭 vbmeta**
 
 ### 5. 直接覆盖 `crypto/Makefile` 导致构建系统整体崩溃
 * **致命原因**：文档若简写为 `cp -rf lz4kd_module/* common/crypto/`，模块自有的简易 Makefile 会直接冲掉 Linux 原生包含几十种加密算法的核心 `Makefile`，导致整个 crypto 目录编译报错停机。
@@ -343,7 +343,7 @@ sh repack_boot.sh /path/to/stock_boot.img /path/to/Image /path/to/final_boot.img
 ```
 脚本将自动调用 64 位 `magiskboot`，在 1 秒内输出结构严谨对齐的 `final_lz4kd_boot.img`！
 
-### 2. 底层手工分步缝合原理 (SOP)
+### 2. 分步缝合 (SOP)
 
 刷入方式：
 * 在 TWRP 中切换为【安装镜像】-> 选择 `final_lz4kd_boot.img` -> 勾选【Boot】滑动刷入；
@@ -353,19 +353,8 @@ sh repack_boot.sh /path/to/stock_boot.img /path/to/Image /path/to/final_boot.img
 
 ## 七、 开机验收、Scene 界面接管与性能验证
 
-### 1. 内核生效验证
+### 1. 刷入配套的magisk模块，开机自动切换zram压缩方案
 开机后在终端执行：
 ```bash
 cat /proc/version
-# 确认显示自编的时间戳与构建账号
-
-grep -A 8 "lz4kd" /proc/crypto
-# 确认 lz4kd-scomp 与 lz4kd-generic 自检状态均为 selftest : passed
-```
-
-### 2. Scene / 性能调节 App 一键接管
-由于方案中已将 `lz4kd` 注册到内核 ZRAM 的静态菜单数组 `backends[]`：
-1. 打开 **Scene** App（或微调工具箱），授予 Root 权限；
-2. 导航至【功能】->【Swap / ZRAM 调节】；
-3. 下拉菜单中将原生出现 **`lz4kd`**，直接点选并勾选【开机自动应用】；
-4. 以后每次手机开机，系统全自动接管为华为 LZ4KD 4KB 差分增量压缩模式！
+或使用配套sh脚本测试
